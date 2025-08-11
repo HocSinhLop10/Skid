@@ -1,9 +1,10 @@
--- // GUI Mini "Hutao Hub [Free]" - Fix draggable (PC + Mobile) //
+-- // GUI Mini "Hutao Hub [Free]" - Draggable + Always on Top //
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
 
--- Hàm cho phép kéo frame (PC + Mobile)
+-- Hàm kéo frame (PC + Mobile)
 local function makeDraggable(frame, handle)
     handle = handle or frame
     local dragging, dragInput, dragStart, startPos
@@ -40,11 +41,13 @@ local function makeDraggable(frame, handle)
     end)
 end
 
--- Tạo ScreenGui
+-- Tạo ScreenGui (luôn trên cùng)
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.DisplayOrder = 999999
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Name = "HutaoHubMiniGUI"
+ScreenGui.Parent = CoreGui
 
 -- Frame chính
 local MainFrame = Instance.new("Frame")
@@ -54,10 +57,7 @@ MainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 MainFrame.BackgroundTransparency = 0.3
 MainFrame.BorderSizePixel = 0
 MainFrame.Parent = ScreenGui
-
-local UICorner = Instance.new("UICorner")
-UICorner.CornerRadius = UDim.new(0, 10)
-UICorner.Parent = MainFrame
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
 
 -- Tiêu đề
 local Title = Instance.new("TextLabel")
@@ -69,7 +69,7 @@ Title.Font = Enum.Font.GothamBold
 Title.TextSize = 16
 Title.Parent = MainFrame
 
--- Nút Toggle
+-- Nút Auto Kill
 local Toggle = Instance.new("TextButton")
 Toggle.Text = "Auto Kill: OFF"
 Toggle.Size = UDim2.new(1, -20, 0, 40)
@@ -79,10 +79,7 @@ Toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
 Toggle.Font = Enum.Font.Gotham
 Toggle.TextSize = 14
 Toggle.Parent = MainFrame
-
-local UICorner2 = Instance.new("UICorner")
-UICorner2.CornerRadius = UDim.new(0, 8)
-UICorner2.Parent = Toggle
+Instance.new("UICorner", Toggle).CornerRadius = UDim.new(0, 8)
 
 -- Nút X
 local HideBtn = Instance.new("TextButton")
@@ -94,16 +91,13 @@ HideBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 HideBtn.Font = Enum.Font.GothamBold
 HideBtn.TextSize = 12
 HideBtn.Parent = MainFrame
-
-local UICorner3 = Instance.new("UICorner")
-UICorner3.CornerRadius = UDim.new(1, 0)
-UICorner3.Parent = HideBtn
+Instance.new("UICorner", HideBtn).CornerRadius = UDim.new(1, 0)
 
 -- Nút tròn ☪
 local CircleBtn = Instance.new("TextButton")
 CircleBtn.Text = "☪"
 CircleBtn.Size = UDim2.new(0, 40, 0, 40)
-CircleBtn.Position = UDim2.new(0.5, 0, 0.5, 0) -- Giữa màn hình
+CircleBtn.Position = UDim2.new(0.5, 0, 0.5, 0)
 CircleBtn.AnchorPoint = Vector2.new(0.5, 0.5)
 CircleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
 CircleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -111,10 +105,7 @@ CircleBtn.Font = Enum.Font.GothamBold
 CircleBtn.TextSize = 20
 CircleBtn.Visible = false
 CircleBtn.Parent = ScreenGui
-
-local UICorner4 = Instance.new("UICorner")
-UICorner4.CornerRadius = UDim.new(1, 0)
-UICorner4.Parent = CircleBtn
+Instance.new("UICorner", CircleBtn).CornerRadius = UDim.new(1, 0)
 
 -- Cho phép kéo
 makeDraggable(MainFrame, Title)
@@ -122,44 +113,55 @@ makeDraggable(CircleBtn, CircleBtn)
 
 -- Ẩn/hiện GUI
 local lastPos = MainFrame.Position
-
 HideBtn.MouseButton1Click:Connect(function()
     lastPos = MainFrame.Position
     MainFrame.Visible = false
     CircleBtn.Visible = true
 end)
-
 CircleBtn.MouseButton1Click:Connect(function()
     MainFrame.Position = lastPos
     MainFrame.Visible = true
     CircleBtn.Visible = false
 end)
 
--- Script Auto Kill
+-- Auto Kill logic
 local Active = false
 local loopRunning = false
+local CurrentTarget = nil
 
-local function KillOnce()
-    pcall(function()
-        local localChar = Players.LocalPlayer.Character
-        if not (localChar and localChar:FindFirstChild("HumanoidRootPart")) then return end
-        local survivorsFolder = workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild("Survivors")
-        if not survivorsFolder then return end
-        for _, survivor in ipairs(survivorsFolder:GetChildren()) do
-            if not Active then break end
-            if survivor:IsA("Model") and survivor:FindFirstChild("HumanoidRootPart") then
-                pcall(function()
-                    localChar.HumanoidRootPart.CFrame = survivor.HumanoidRootPart.CFrame
-                end)
-                local ReplicatedStorage = game:GetService("ReplicatedStorage")
-                local remote = ReplicatedStorage:FindFirstChild("Modules")
-                              and ReplicatedStorage.Modules:FindFirstChild("Network")
-                              and ReplicatedStorage.Modules.Network:FindFirstChild("RemoteEvent")
-                if remote and typeof(remote.FireServer) == "function" then
-                    pcall(function() remote:FireServer("UseActorAbility", "Slash") end)
-                end
-                task.wait(0.05)
+local function GetClosestSurvivor()
+    local localChar = LocalPlayer.Character
+    if not (localChar and localChar:FindFirstChild("HumanoidRootPart")) then return nil end
+    local survivorsFolder = workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild("Survivors")
+    if not survivorsFolder then return nil end
+
+    local closest, minDist = nil, math.huge
+    for _, survivor in ipairs(survivorsFolder:GetChildren()) do
+        local humanoid = survivor:FindFirstChildOfClass("Humanoid")
+        if survivor:IsA("Model") and survivor:FindFirstChild("HumanoidRootPart") and humanoid and humanoid.Health > 0 then
+            local dist = (localChar.HumanoidRootPart.Position - survivor.HumanoidRootPart.Position).Magnitude
+            if dist < minDist then
+                minDist = dist
+                closest = survivor
             end
+        end
+    end
+    return closest
+end
+
+local function KillTarget(target)
+    pcall(function()
+        if not target then return end
+        local localChar = LocalPlayer.Character
+        if not (localChar and localChar:FindFirstChild("HumanoidRootPart")) then return end
+        localChar.HumanoidRootPart.CFrame = target.HumanoidRootPart.CFrame
+
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local remote = ReplicatedStorage:FindFirstChild("Modules")
+                      and ReplicatedStorage.Modules:FindFirstChild("Network")
+                      and ReplicatedStorage.Modules.Network:FindFirstChild("RemoteEvent")
+        if remote and typeof(remote.FireServer) == "function" then
+            remote:FireServer("UseActorAbility", "Slash")
         end
     end)
 end
@@ -169,8 +171,13 @@ local function StartLoop()
     loopRunning = true
     task.spawn(function()
         while Active do
-            KillOnce()
-            task.wait(0.15)
+            if not CurrentTarget or not CurrentTarget.Parent or not CurrentTarget:FindFirstChildOfClass("Humanoid") or CurrentTarget:FindFirstChildOfClass("Humanoid").Health <= 0 then
+                CurrentTarget = GetClosestSurvivor()
+            end
+            if CurrentTarget then
+                KillTarget(CurrentTarget)
+            end
+            task.wait(0.01)
         end
         loopRunning = false
     end)
