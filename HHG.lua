@@ -61,8 +61,8 @@ local function create3DModel()
         )
         pushTween:Play()
 
-        -- Khi GUI bắt đầu thu nhỏ (sau 2.5s) → thu tay về
-        task.delay(2.5, function()
+        -- Khi GUI bắt đầu thu nhỏ (sau 4.5s) → thu tay về
+        task.delay(4.5, function()
             local backTween = TweenService:Create(
                 rightShoulder,
                 TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
